@@ -1,0 +1,8 @@
+{
+  "extraKnownMarketplaces": {
+    "star-tasks": {
+      "source": { "source": "github", "repo": "joshuajohnedwinburt-bit/claudeprojectstasks" }
+    }
+  },
+  "enabledPlugins": { "star-tasks@star-tasks": true }
+}
