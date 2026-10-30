@@ -130,7 +130,7 @@ export const removeTask = (board: Board, id: number): Change => {
 export const summary = (board: Board): string => {
   const stars = activeStars(board)
   if (stars.length === 0 && board.tasks.length === 0) {
-    return 'No stars or tasks yet. Add one with /star add <title> or /task add <text>.'
+    return 'No stars or tasks yet. Ask Claude to add a star or a task, or use /star add <title> and /task add <text>.'
   }
   const lines: string[] = []
   if (stars.length > 0) {

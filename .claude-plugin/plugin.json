@@ -1,7 +1,7 @@
 {
   "name": "star-tasks",
-  "version": "0.1.0",
-  "description": "Track a project's stars (objectives) and tasks in a band above the prompt, saved per project in .claude/tasks.json",
+  "version": "0.2.0",
+  "description": "Track a project's stars (objectives) and tasks in a band above the prompt, saved per project",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Joshua"

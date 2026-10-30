@@ -8,6 +8,7 @@ declare module 'claude-code' {
       board: Shaped<Board>
       isExpanded: boolean
       filter: number | null
+      savedAt: string
     }
   }
 }

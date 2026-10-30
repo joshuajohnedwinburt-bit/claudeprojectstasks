@@ -97,3 +97,26 @@ test('commands write the project file and the band shows and toggles it', async 
   const tool = await $.tool.call({ tool: 'mcp__star-tasks__board', action: 'add_task', text: 'from Claude', star: 1 })
   expect(String(tool.result)).toContain('Added task #2 under S1: from Claude')
 })
+
+test('in a Claude project the list is saved in the shared project files folder', async ($, on) => {
+  const files = new Map<string, string>()
+  on('session.root', () => ({ value: '/home/user' }))
+  on('fs.exists', (_, e) => ({ value: e.path.replace(/\/$/, '') === '/mnt/project-files' || files.has(e.path) }))
+  on('fs.read', (_, e) => {
+    const text = files.get(e.path)
+    if (text === undefined) throw new Error('ENOENT')
+    return { value: text }
+  })
+  on('fs.write', (_, e) => {
+    files.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('tool.register', (_, e) => ({ value: { tool: `mcp__star-tasks__${e.name}` } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/home/user', surface: 'desktop', isInteractive: true })
+  await $.tool.call({ tool: 'mcp__star-tasks__board', action: 'add_star', text: 'Launch' })
+
+  expect([...files.keys()]).toEqual(['/mnt/project-files/star-tasks/tasks.json'])
+})

@@ -21,6 +21,10 @@ import type { Change } from './board'
 const PANE = 'star-tasks'
 const LILAC = '#c9b8ff'
 const FILE = '.claude/tasks.json'
+// A Claude project's threads share this folder and it outlives each thread's
+// container, so the list lives there when it exists.
+const PROJECT_FILES = '/mnt/project-files/'
+const PROJECT_FILE = '/mnt/project-files/star-tasks/tasks.json'
 
 // Change the tag when Board's fields change: it declines what an earlier
 // version stored, which outlives a reload.
@@ -29,6 +33,7 @@ const board = atom({ plugin: 'star-tasks', key: 'board' } as const, EMPTY, {
 })
 const isExpanded = atom({ plugin: 'star-tasks', key: 'isExpanded' } as const, false)
 const filter = atom({ plugin: 'star-tasks', key: 'filter' } as const, null)
+const savedAt = atom({ plugin: 'star-tasks', key: 'savedAt' } as const, '')
 
 type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Button'>
 
@@ -279,9 +284,10 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'board',
       description:
-        "The project's stars (long-running objectives) and tasks, kept in .claude/tasks.json. " +
+        "The project's stars (long-running objectives) and tasks, shared by every session in this project. " +
         'Call with action "list" to see them. Add or check off items only when the user asks you to ' +
-        'track, add or complete something, or confirms you should.',
+        'track, add or complete something, or confirms you should. When the user asks to see their ' +
+        'tasks, call list and show the result.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -298,7 +304,9 @@ export const register: Register = on => {
       isDeferred: false,
     })
     const started = await next(e)
-    const path = `${await $.session.root()}/${FILE}`
+    const isProject = await $.fs.exists(PROJECT_FILES).catch(() => false)
+    const path = isProject ? PROJECT_FILE : `${await $.session.root()}/${FILE}`
+    await update($, savedAt, () => path)
     if (await $.fs.exists(path)) {
       const text = await $.fs.read(path).catch(() => '')
       const loaded = parseText(text)
@@ -317,7 +325,7 @@ export const register: Register = on => {
       await $.ui.open({ id: PANE, title: 'Tasks' })
       return { text: 'Tasks pane opened.' }
     }
-    const path = `${await $.session.root()}/${FILE}`
+    const path = (await read($, savedAt)) || `${await $.session.root()}/${FILE}`
     const onDisk = parseText(await $.fs.read(path).catch(() => ''))
     const current = onDisk ?? (await read($, board))
     if (todo.kind === 'list') return { text: summary(current) }
@@ -330,7 +338,7 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'mcp__star-tasks__board' }, async ($, e) => {
     const fn = toolChange(e as unknown as Parameters<typeof toolChange>[0])
-    const path = `${await $.session.root()}/${FILE}`
+    const path = (await read($, savedAt)) || `${await $.session.root()}/${FILE}`
     const onDisk = parseText(await $.fs.read(path).catch(() => ''))
     const current = onDisk ?? (await read($, board))
     if (!fn) return { result: summary(current) }
@@ -350,7 +358,7 @@ export const register: Register = on => {
     const ui = $.ui.resolve(e)
     const b = await read($, board)
     const toggle = async (id: number) => {
-      const path = `${await $.session.root()}/${FILE}`
+      const path = (await read($, savedAt)) || `${await $.session.root()}/${FILE}`
       const current = parseText(await $.fs.read(path).catch(() => '')) ?? (await read($, board))
       const task = current.tasks.find(t => t.id === id)
       const change = setTaskDone(current, id, !task?.isDone)
