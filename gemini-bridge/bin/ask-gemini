@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# ask-gemini: one-shot question to Gemini through the Antigravity CLI (agy),
+# billed to the Google account agy is signed in with (e.g. Google AI Pro).
+#
+# Usage:
+#   ask-gemini "question"                 # prompt as argument
+#   git diff | ask-gemini "review this"   # piped text is appended as context
+#   GEMINI_MODEL=gemini-3.8-flash-medium ask-gemini "..."   # pick a model
+#   ASK_GEMINI_MODE=accept-edits ask-gemini "..."           # let Gemini edit files
+#
+# Gemini runs in the current directory, so it can read the repo itself.
+# Default mode is "plan" (Gemini proposes, does not edit). Requires agy + jq.
+set -euo pipefail
+
+command -v agy >/dev/null || { echo "ask-gemini: agy not found. Install the Antigravity CLI first." >&2; exit 127; }
+command -v jq  >/dev/null || { echo "ask-gemini: jq not found (brew install jq)." >&2; exit 127; }
+
+prompt="$*"
+if [ ! -t 0 ]; then
+  piped="$(cat)"
+  if [ -n "$piped" ]; then
+    prompt="${prompt}
+
+--- context ---
+${piped}"
+  fi
+fi
+[ -n "${prompt//[[:space:]]/}" ] || { echo "ask-gemini: empty prompt" >&2; exit 2; }
+
+args=(-p "$prompt" --output-format json --mode "${ASK_GEMINI_MODE:-plan}")
+[ -n "${GEMINI_MODEL:-}" ]  && args+=(--model "$GEMINI_MODEL")
+[ -n "${GEMINI_EFFORT:-}" ] && args+=(--effort "$GEMINI_EFFORT")
+args+=(--print-timeout "${ASK_GEMINI_TIMEOUT:-10m}")
+
+err="$(mktemp)"; trap 'rm -f "$err"' EXIT
+set +e
+out="$(agy "${args[@]}" 2>"$err")"
+code=$?
+set -e
+
+status="$(jq -r '.status // empty' <<<"$out" 2>/dev/null || true)"
+if [ "$status" = "SUCCESS" ]; then
+  jq -r '.response' <<<"$out"
+  # agy prints soft-denied tool approvals to stderr; surface them briefly.
+  grep -i 'denied' "$err" >&2 || true
+  exit 0
+fi
+
+echo "ask-gemini: agy failed (exit $code, status ${status:-none})" >&2
+jq -r '.error // empty' <<<"$out" 2>/dev/null >&2 || true
+cat "$err" >&2
+grep -qi 'authentication required' "$err" && echo "Run 'agy' once interactively and sign in with Google OAuth." >&2
+exit 1
